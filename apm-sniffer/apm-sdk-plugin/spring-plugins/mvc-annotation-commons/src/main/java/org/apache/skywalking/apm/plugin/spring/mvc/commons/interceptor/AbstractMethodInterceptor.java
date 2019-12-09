@@ -19,6 +19,7 @@
 package org.apache.skywalking.apm.plugin.spring.mvc.commons.interceptor;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.apache.skywalking.apm.agent.core.conf.Config;
@@ -28,6 +29,8 @@ import org.apache.skywalking.apm.agent.core.context.ContextManager;
 import org.apache.skywalking.apm.agent.core.context.tag.Tags;
 import org.apache.skywalking.apm.agent.core.context.trace.AbstractSpan;
 import org.apache.skywalking.apm.agent.core.context.trace.SpanLayer;
+import org.apache.skywalking.apm.agent.core.logging.api.ILog;
+import org.apache.skywalking.apm.agent.core.logging.api.LogManager;
 import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.EnhancedInstance;
 import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.InstanceMethodsAroundInterceptor;
 import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.MethodInterceptResult;
@@ -46,6 +49,11 @@ import static org.apache.skywalking.apm.plugin.spring.mvc.commons.Constants.RESP
  * the abstract method interceptor
  */
 public abstract class AbstractMethodInterceptor implements InstanceMethodsAroundInterceptor {
+
+    private static final ILog logger = LogManager.getLogger(AbstractMethodInterceptor.class);
+
+    private static final String[] FILTER_EXCEPTION = {"com.sunhome.cloud.alarm.exception.ServiceException"};
+
 
     private static boolean IS_SERVLET_GET_STATUS_METHOD_EXIST;
     private static final String SERVLET_RESPONSE_CLASS = "javax.servlet.http.HttpServletResponse";
@@ -179,6 +187,13 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
     @Override
     public void handleMethodException(EnhancedInstance objInst, Method method, Object[] allArguments,
         Class<?>[] argumentsTypes, Throwable t) {
-        ContextManager.activeSpan().errorOccurred().log(t);
+        logger.info("过滤异常列表:{}, 处理遗产类型:{}", Arrays.asList(FILTER_EXCEPTION).toString(), t.getClass().getName());
+        if (Arrays.asList(FILTER_EXCEPTION).contains(t.getClass().getName())) {
+            logger.info("业务异常:{},打印错误log", t.getClass().getName());
+            ContextManager.activeSpan().log(t);
+        }else{
+            logger.info("系统异常:{}", t.getClass().getName());
+            ContextManager.activeSpan().errorOccurred().log(t);
+        }
     }
 }
