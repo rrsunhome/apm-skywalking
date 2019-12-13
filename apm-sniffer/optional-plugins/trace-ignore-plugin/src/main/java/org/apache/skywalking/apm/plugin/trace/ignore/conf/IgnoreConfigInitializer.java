@@ -64,6 +64,7 @@ public class IgnoreConfigInitializer {
         } catch (Exception e) {
             LOGGER.error(e, "Failed to read the system env.");
         }
+
     }
 
     private static void overrideConfigBySystemProp() throws IllegalAccessException {

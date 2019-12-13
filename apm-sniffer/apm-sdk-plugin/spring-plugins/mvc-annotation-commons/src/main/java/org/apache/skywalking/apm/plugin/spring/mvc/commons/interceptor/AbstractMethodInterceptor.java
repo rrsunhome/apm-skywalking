@@ -22,6 +22,7 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
 import org.apache.skywalking.apm.agent.core.conf.Config;
 import org.apache.skywalking.apm.agent.core.context.CarrierItem;
 import org.apache.skywalking.apm.agent.core.context.ContextCarrier;
@@ -36,6 +37,8 @@ import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.InstanceM
 import org.apache.skywalking.apm.agent.core.plugin.interceptor.enhance.MethodInterceptResult;
 import org.apache.skywalking.apm.agent.core.util.MethodUtil;
 import org.apache.skywalking.apm.network.trace.component.ComponentsDefine;
+import org.apache.skywalking.apm.plugin.exception.ignore.conf.IgnoreExceptionConfig;
+import org.apache.skywalking.apm.plugin.exception.ignore.matcher.DefaultExceptionIgnoreMatcher;
 import org.apache.skywalking.apm.plugin.spring.mvc.commons.EnhanceRequireObjectCache;
 import org.apache.skywalking.apm.plugin.spring.mvc.commons.exception.IllegalMethodStackDepthException;
 import org.apache.skywalking.apm.plugin.spring.mvc.commons.exception.ServletResponseNotFoundException;
@@ -69,9 +72,9 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
 
     @Override
     public void beforeMethod(EnhancedInstance objInst, Method method, Object[] allArguments, Class<?>[] argumentsTypes,
-        MethodInterceptResult result) throws Throwable {
+                             MethodInterceptResult result) throws Throwable {
 
-        Boolean forwardRequestFlag = (Boolean)ContextManager.getRuntimeContext().get(FORWARD_REQUEST_FLAG);
+        Boolean forwardRequestFlag = (Boolean) ContextManager.getRuntimeContext().get(FORWARD_REQUEST_FLAG);
         /**
          * Spring MVC plugin do nothing if current request is forward request.
          * Ref: https://github.com/apache/skywalking/pull/1325
@@ -84,7 +87,7 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
         if (Config.Plugin.SpringMVC.USE_QUALIFIED_NAME_AS_ENDPOINT_NAME) {
             operationName = MethodUtil.generateOperationName(method);
         } else {
-            EnhanceRequireObjectCache pathMappingCache = (EnhanceRequireObjectCache)objInst.getSkyWalkingDynamicField();
+            EnhanceRequireObjectCache pathMappingCache = (EnhanceRequireObjectCache) objInst.getSkyWalkingDynamicField();
             String requestURL = pathMappingCache.findPathMapping(method);
             if (requestURL == null) {
                 requestURL = getRequestURL(method);
@@ -94,9 +97,9 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
             operationName = requestURL;
         }
 
-        HttpServletRequest request = (HttpServletRequest)ContextManager.getRuntimeContext().get(REQUEST_KEY_IN_RUNTIME_CONTEXT);
+        HttpServletRequest request = (HttpServletRequest) ContextManager.getRuntimeContext().get(REQUEST_KEY_IN_RUNTIME_CONTEXT);
         if (request != null) {
-            StackDepth stackDepth = (StackDepth)ContextManager.getRuntimeContext().get(CONTROLLER_METHOD_STACK_DEPTH);
+            StackDepth stackDepth = (StackDepth) ContextManager.getRuntimeContext().get(CONTROLLER_METHOD_STACK_DEPTH);
 
             if (stackDepth == null) {
                 ContextCarrier contextCarrier = new ContextCarrier();
@@ -116,7 +119,7 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
                 ContextManager.getRuntimeContext().put(CONTROLLER_METHOD_STACK_DEPTH, stackDepth);
             } else {
                 AbstractSpan span =
-                    ContextManager.createLocalSpan(buildOperationName(objInst, method));
+                        ContextManager.createLocalSpan(buildOperationName(objInst, method));
                 span.setComponent(ComponentsDefine.SPRING_MVC_ANNOTATION);
             }
 
@@ -126,7 +129,7 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
 
     private String buildOperationName(Object invoker, Method method) {
         StringBuilder operationName = new StringBuilder(invoker.getClass().getName())
-            .append(".").append(method.getName()).append("(");
+                .append(".").append(method.getName()).append("(");
         for (Class<?> type : method.getParameterTypes()) {
             operationName.append(type.getName()).append(",");
         }
@@ -140,8 +143,8 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
 
     @Override
     public Object afterMethod(EnhancedInstance objInst, Method method, Object[] allArguments, Class<?>[] argumentsTypes,
-        Object ret) throws Throwable {
-        Boolean forwardRequestFlag = (Boolean)ContextManager.getRuntimeContext().get(FORWARD_REQUEST_FLAG);
+                              Object ret) throws Throwable {
+        Boolean forwardRequestFlag = (Boolean) ContextManager.getRuntimeContext().get(FORWARD_REQUEST_FLAG);
         /**
          * Spring MVC plugin do nothing if current request is forward request.
          * Ref: https://github.com/apache/skywalking/pull/1325
@@ -150,10 +153,10 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
             return ret;
         }
 
-        HttpServletRequest request = (HttpServletRequest)ContextManager.getRuntimeContext().get(REQUEST_KEY_IN_RUNTIME_CONTEXT);
+        HttpServletRequest request = (HttpServletRequest) ContextManager.getRuntimeContext().get(REQUEST_KEY_IN_RUNTIME_CONTEXT);
 
         if (request != null) {
-            StackDepth stackDepth = (StackDepth)ContextManager.getRuntimeContext().get(CONTROLLER_METHOD_STACK_DEPTH);
+            StackDepth stackDepth = (StackDepth) ContextManager.getRuntimeContext().get(CONTROLLER_METHOD_STACK_DEPTH);
             if (stackDepth == null) {
                 throw new IllegalMethodStackDepthException();
             } else {
@@ -163,7 +166,7 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
             AbstractSpan span = ContextManager.activeSpan();
 
             if (stackDepth.depth() == 0) {
-                HttpServletResponse response = (HttpServletResponse)ContextManager.getRuntimeContext().get(RESPONSE_KEY_IN_RUNTIME_CONTEXT);
+                HttpServletResponse response = (HttpServletResponse) ContextManager.getRuntimeContext().get(RESPONSE_KEY_IN_RUNTIME_CONTEXT);
                 if (response == null) {
                     throw new ServletResponseNotFoundException();
                 }
@@ -186,14 +189,22 @@ public abstract class AbstractMethodInterceptor implements InstanceMethodsAround
 
     @Override
     public void handleMethodException(EnhancedInstance objInst, Method method, Object[] allArguments,
-        Class<?>[] argumentsTypes, Throwable t) {
-        logger.info("过滤异常列表:{}, 处理遗产类型:{}", Arrays.asList(FILTER_EXCEPTION).toString(), t.getClass().getName());
-        if (Arrays.asList(FILTER_EXCEPTION).contains(t.getClass().getName())) {
-            logger.info("业务异常:{},打印错误log", t.getClass().getName());
+                                      Class<?>[] argumentsTypes, Throwable t) {
+//        logger.info("过滤异常列表:{}, 处理遗产类型:{}", Arrays.asList(FILTER_EXCEPTION).toString(), t.getClass().getName());
+//        if (Arrays.asList(FILTER_EXCEPTION).contains(t.getClass().getName())) {
+//            logger.info("业务异常:{},打印错误log", t.getClass().getName());
+//            ContextManager.activeSpan().log(t);
+//        }else{
+//            logger.info("系统异常:{}", t.getClass().getName());
+//            ContextManager.activeSpan().errorOccurred().log(t);
+////        }
+        if (DefaultExceptionIgnoreMatcher.getInstance().match(t)) {
+            logger.debug("业务异常:{},打印错误log", t.getClass().getName());
             ContextManager.activeSpan().log(t);
-        }else{
-            logger.info("系统异常:{}", t.getClass().getName());
+        } else {
+            logger.debug("系统异常:{}", t.getClass().getName());
             ContextManager.activeSpan().errorOccurred().log(t);
+
         }
     }
 }
