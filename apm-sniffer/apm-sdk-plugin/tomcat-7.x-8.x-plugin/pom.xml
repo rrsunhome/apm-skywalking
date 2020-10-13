@@ -32,7 +32,7 @@
 
     <properties>
         <tomcat.version>8.0.36</tomcat.version>
-        <junit.version>4.12</junit.version>
+        <junit.version>4.13.1</junit.version>
         <apache-httpclient.version>4.5.2</apache-httpclient.version>
     </properties>
 
